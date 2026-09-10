@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+agent-tools
+terminals
+*.md
+!README.md
+data/reports.json
+data/settings.json
+.env
+.env.local

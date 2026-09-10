@@ -10,8 +10,16 @@ export function portalLinks(household: Household) {
       url: `https://www.verivox.de/stromvergleich/?plz=${encodeURIComponent(plz)}&kwh=${kwh}`,
     },
     {
-      label: "Check24 Stromvergleich",
-      url: "https://www.check24.de/strom/",
+      label: "Check24 Stromvergleich (PLZ 55545)",
+      url: `https://www.check24.de/strom/?zipcode=${encodeURIComponent(plz)}&consumption=${kwh}`,
+    },
+    {
+      label: "StromAuskunft Wechselservice",
+      url: "https://www.stromauskunft.de/wechselservice-strom-und-gas/",
+    },
+    {
+      label: "ENTEGA Ökostrom-Tarife",
+      url: "https://www.entega.de/oekostrom/oekostrom-tarife/",
     },
     {
       label: "StromAuskunft Bad Kreuznach",

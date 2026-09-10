@@ -21,6 +21,9 @@ export function grundversorgungOffer(household: Household): TariffOffer {
     source: "Preisblatt Grundversorgung ab 01.01.2026",
     sourceUrl:
       "https://www.kreuznacherstadtwerke.de/fileadmin/user_upload/_Energie-fuer-Ihr-Zuhause/Netz/2026-01-01_Preisblatt__Strom_Grundversorgung_BF.pdf",
+    signupUrl:
+      "https://www.kreuznacherstadtwerke.de/fileadmin/user_upload/_Energie-fuer-Ihr-Zuhause/Netz/2026-01-01_Preisblatt__Strom_Grundversorgung_BF.pdf",
+    signupLabel: "Preisblatt öffnen",
     estimated: false,
     notes: [
       "Gesetzliche Grundversorgung, 2 Wochen Kündigungsfrist.",
@@ -50,6 +53,8 @@ export function localStadtwerkeOffers(household: Household): TariffOffer[] {
       monthlyFee: 15.25,
       source: "Drittanbieter-Preisblatt (Stromvermittlung), bitte im Stadtwerke-Rechner prüfen",
       sourceUrl: "https://www.kreuznacherstadtwerke.de/energie-fuer-ihr-zuhause/nahestrom-natur",
+      signupUrl: "https://www.kreuznacherstadtwerke.de/energie-fuer-ihr-zuhause/nahestrom-natur",
+      signupLabel: "NaheSTROM rechnen / wechseln",
       estimated: true,
       notes: [
         "Lokales Ökostrom-Angebot der Stadtwerke, ohne Wechsel weg vom örtlichen Versorger.",

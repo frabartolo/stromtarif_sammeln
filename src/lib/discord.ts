@@ -7,7 +7,8 @@ import type { ScanReport, TariffOffer } from "@/lib/types";
 function offerLine(offer: TariffOffer): string {
   const follow =
     offer.bonusYear1 > 0 ? ` · Folgejahr ${formatEur(offer.recurringYearCost, 0)}` : "";
-  return `**${offer.provider}** – ${offer.name}: Jahr 1 ${formatEur(offer.firstYearCost, 0)}${follow}`;
+  const link = offer.signupUrl ? ` · [öffnen](${offer.signupUrl})` : "";
+  return `**${offer.provider}** – ${offer.name}: Jahr 1 ${formatEur(offer.firstYearCost, 0)}${follow}${link}`;
 }
 
 export function buildDiscordPayload(report: ScanReport) {
@@ -31,7 +32,7 @@ export function buildDiscordPayload(report: ScanReport) {
     {
       name: "Empfehlung",
       value: rec
-        ? `${rec.provider} · ${rec.name}\nJahr 1 ${formatEur(rec.firstYearCost, 0)} inkl. Bonus\n${formatEur(rec.recurringYearCost, 0)} Folgejahr (${formatCt(rec.workingPriceCt ?? 0)})`
+        ? `${rec.provider} · ${rec.name}\nJahr 1 ${formatEur(rec.firstYearCost, 0)} inkl. Bonus\n${formatEur(rec.recurringYearCost, 0)} Folgejahr (${formatCt(rec.workingPriceCt ?? 0)})${rec.signupUrl ? `\n[Tarif öffnen](${rec.signupUrl})` : ""}`
         : report.recommendation.headline,
       inline: false,
     },

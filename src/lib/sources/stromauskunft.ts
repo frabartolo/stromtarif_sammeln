@@ -1,5 +1,6 @@
 import { fetchText, stripTags } from "@/lib/http";
 import { parseDeNumber } from "@/lib/money";
+import { providerListingHref, signupForProvider } from "@/lib/sources/signup";
 import type { Household, SourceStatus, TariffOffer } from "@/lib/types";
 
 const URL =
@@ -74,12 +75,15 @@ function offerFromPrices(opts: {
   contractMonths: number | null;
   sourceNote: string;
   estimated: boolean;
+  listingUrl?: string;
+  household: Household;
 }): TariffOffer {
   const basePriceYear = opts.monthlyFee * 12;
   const recurring = (opts.kwh * opts.workingPriceCt) / 100 + basePriceYear;
   const percentBonus = opts.bonusPercent != null ? recurring * (opts.bonusPercent / 100) : 0;
   const bonusYear1 = percentBonus + opts.bonusFixed;
   const firstYear = Math.max(0, recurring - bonusYear1);
+  const links = signupForProvider(opts.provider, opts.household, opts.listingUrl);
   return {
     id: opts.id,
     provider: opts.provider,
@@ -95,7 +99,9 @@ function offerFromPrices(opts: {
     contractMonths: opts.contractMonths,
     monthlyFee: opts.monthlyFee,
     source: "StromAuskunft Bad Kreuznach",
-    sourceUrl: URL,
+    sourceUrl: links.sourceUrl,
+    signupUrl: links.signupUrl,
+    signupLabel: links.signupLabel,
     estimated: opts.estimated,
     notes: [
       `Arbeitspreis ${opts.workingPriceCt.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ct/kWh, Grundpreis ${opts.monthlyFee.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €/Monat.`,
@@ -107,8 +113,9 @@ function offerFromPrices(opts: {
   };
 }
 
-function parseListedTariffs(html: string, kwh: number): TariffOffer[] {
+function parseListedTariffs(html: string, household: Household): TariffOffer[] {
   const offers: TariffOffer[] = [];
+  const kwh = household.purchasedKwh;
   const re = /Tarif:\s*([^<]{3,80})/gi;
   let matchTariff: RegExpExecArray | null;
   while ((matchTariff = re.exec(html))) {
@@ -144,8 +151,10 @@ function parseListedTariffs(html: string, kwh: number): TariffOffer[] {
         guaranteeMonths,
         contractMonths,
         sourceNote:
-          "Aus der StromAuskunft-Wechseltabelle (die drei günstigsten abschließbaren Tarife, oft 3.500-kWh-Darstellung). Arbeits- und Grundpreis gelten verbrauchsunabhängig; Bonus vor Abschluss mit 14.500 kWh gegenprüfen.",
+          "Aus der StromAuskunft-Wechseltabelle. Der Button „Tarif öffnen“ führt zum Anbieter; Abschluss mit 14.500 kWh und Bonusdeckel dort oder über Verivox/Check24 gegenprüfen.",
         estimated: bonusPercent != null,
+        listingUrl: providerListingHref(chunk),
+        household,
       }),
     );
   }
@@ -162,11 +171,13 @@ function scaleFrom3500(opts: {
   assumedBonus: number;
   assumedGpYear: number;
   sourceNote: string;
+  household: Household;
 }): TariffOffer {
   const apCt =
     ((opts.year1At3500 + opts.assumedBonus - opts.assumedGpYear) / 3500) * 100;
   const recurring = (opts.kwh * apCt) / 100 + opts.assumedGpYear;
   const firstYear = Math.max(0, recurring - opts.assumedBonus);
+  const links = signupForProvider(opts.provider, opts.household);
   return {
     id: opts.id,
     provider: opts.provider,
@@ -182,7 +193,9 @@ function scaleFrom3500(opts: {
     contractMonths: 12,
     monthlyFee: null,
     source: "StromAuskunft Bad Kreuznach (Übersicht 3.500 kWh)",
-    sourceUrl: URL,
+    sourceUrl: links.sourceUrl,
+    signupUrl: links.signupUrl,
+    signupLabel: links.signupLabel,
     estimated: true,
     notes: [
       `Portalpreis bei 3.500 kWh: ${opts.year1At3500.toLocaleString("de-DE", {
@@ -228,7 +241,7 @@ export async function fetchStromauskunft(household: Household): Promise<{
     };
   }
 
-  const listed = parseListedTariffs(res.text, household.purchasedKwh);
+  const listed = parseListedTariffs(res.text, household);
   const text = stripTags(res.text);
   const cheapestCtRaw = match(
     text,
@@ -261,6 +274,7 @@ export async function fetchStromauskunft(household: Household): Promise<{
         assumedBonus: 220,
         assumedGpYear: 175,
         sourceNote: "Nur in der 3.500-kWh-Übersicht, nicht in der Wechseltabelle. Stärker geschätzt.",
+        household,
       }),
     );
   }

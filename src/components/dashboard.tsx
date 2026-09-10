@@ -301,6 +301,17 @@ export function Dashboard({
                   {report.recommendation.headline}
                 </p>
                 <p className="text-sm text-muted-foreground">{report.recommendation.body}</p>
+                {recommended?.signupUrl ? (
+                  <a
+                    href={recommended.signupUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={buttonVariants({ size: "lg" })}
+                  >
+                    {recommended.signupLabel ?? "Tarif öffnen"}
+                    <ExternalLink className="size-4" />
+                  </a>
+                ) : null}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Metric
                     label="Nächstes Jahr inkl. Bonus"
@@ -448,7 +459,7 @@ export function Dashboard({
                       <TableHead className="text-right">Arbeitspreis</TableHead>
                       <TableHead className="text-right">Jahr 1 inkl. Bonus</TableHead>
                       <TableHead className="text-right">Folgejahr</TableHead>
-                      <TableHead></TableHead>
+                      <TableHead className="text-right">Abschluss</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -476,7 +487,18 @@ export function Dashboard({
                             {formatEur(offer.recurringYearCost, 0)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {offer.sourceUrl ? (
+                            {offer.signupUrl ? (
+                              <a
+                                href={offer.signupUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={buttonVariants({ variant: isRec ? "default" : "outline", size: "sm" })}
+                                title={offer.signupLabel}
+                              >
+                                Öffnen
+                                <ExternalLink className="size-3.5" />
+                              </a>
+                            ) : offer.sourceUrl ? (
                               <a
                                 href={offer.sourceUrl}
                                 target="_blank"

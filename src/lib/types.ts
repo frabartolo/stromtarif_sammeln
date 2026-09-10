@@ -26,6 +26,8 @@ export type TariffOffer = {
   monthlyFee: number | null;
   source: string;
   sourceUrl?: string;
+  signupUrl?: string;
+  signupLabel?: string;
   notes: string[];
   estimated: boolean;
 };

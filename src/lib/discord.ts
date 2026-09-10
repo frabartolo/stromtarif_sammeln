@@ -5,16 +5,17 @@ import { loadSettings, maskWebhook } from "@/lib/store";
 import type { ScanReport, TariffOffer } from "@/lib/types";
 
 function offerLine(offer: TariffOffer): string {
-  const saveNote = offer.bonusYear1 > 0 ? ` · Jahr 1 ${formatEur(offer.firstYearCost, 0)}` : "";
-  return `**${offer.provider}** – ${offer.name}: ${formatEur(offer.recurringYearCost, 0)}/a${saveNote}`;
+  const follow =
+    offer.bonusYear1 > 0 ? ` · Folgejahr ${formatEur(offer.recurringYearCost, 0)}` : "";
+  return `**${offer.provider}** – ${offer.name}: Jahr 1 ${formatEur(offer.firstYearCost, 0)}${follow}`;
 }
 
 export function buildDiscordPayload(report: ScanReport) {
   const rec = report.offers.find((o) => o.id === report.recommendation.offerId);
   const gv = report.offers.find((o) => o.kind === "grundversorgung");
   const top = [...report.offers]
-    .sort((a, b) => a.recurringYearCost - b.recurringYearCost)
-    .slice(0, 4);
+    .sort((a, b) => a.firstYearCost - b.firstYearCost)
+    .slice(0, 6);
 
   const color = report.recommendation.savingsVsGrundversorgung != null &&
     report.recommendation.savingsVsGrundversorgung > 0
@@ -30,7 +31,7 @@ export function buildDiscordPayload(report: ScanReport) {
     {
       name: "Empfehlung",
       value: rec
-        ? `${rec.provider} · ${rec.name}\n${formatEur(rec.recurringYearCost, 0)} / Jahr (${formatCt(rec.workingPriceCt ?? 0)})`
+        ? `${rec.provider} · ${rec.name}\nJahr 1 ${formatEur(rec.firstYearCost, 0)} inkl. Bonus\n${formatEur(rec.recurringYearCost, 0)} Folgejahr (${formatCt(rec.workingPriceCt ?? 0)})`
         : report.recommendation.headline,
       inline: false,
     },
@@ -38,7 +39,7 @@ export function buildDiscordPayload(report: ScanReport) {
 
   if (gv) {
     fields.push({
-      name: "Gegen Grundversorgung",
+      name: "Grundversorgung Jahr 1",
       value: `${formatEur(gv.recurringYearCost, 0)} / Jahr${
         report.recommendation.savingsVsGrundversorgung != null
           ? `\nΔ ${formatEur(report.recommendation.savingsVsGrundversorgung, 0)}`
@@ -79,7 +80,7 @@ export function buildDiscordPayload(report: ScanReport) {
   }
 
   fields.push({
-    name: "Top-Tarife (Folgekosten ohne Bonus)",
+    name: "Günstigste Tarife (nächstes Jahr inkl. Bonus)",
     value: top.map(offerLine).join("\n").slice(0, 1024),
     inline: false,
   });

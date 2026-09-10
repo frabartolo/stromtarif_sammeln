@@ -59,7 +59,7 @@ DISCORD_ALLOWED_USERS=...   # Komma-getrennte Discord-User-IDs
 ## Was der Agent tut
 
 - Liest die **Grundversorgung der Stadtwerke Bad Kreuznach** (Preisblatt ab 01.01.2026).
-- Holt Neukunden- und Ökostromtarife für Bad Kreuznach bei StromAuskunft und rechnet auf 14.500 kWh hoch.
+- Holt abschließbare Tarife von StromAuskunft (Arbeitspreis, Grundpreis, Bonus) und rechnet auf 14.500 kWh hoch. Verivox/Check24 blocken Bots – dort gibt es oft mehr Treffer, daher Deeplinks zum Gegenprüfen.
 - Lässt dynamische Börsentarife weg, solange kein intelligentes Messsystem (iMSys) da ist.
 - Erinnert an das Wechselfenster vor dem 31.12.2026 (Lieferbeginn 1.1.2027, Anstoß ca. Mitte November).
 - Schreibt montags 07:00 Europe/Berlin nach Discord; an anderen Tagen 07:15 nur bei spürbarer Verbesserung.

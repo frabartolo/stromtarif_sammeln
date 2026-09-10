@@ -122,7 +122,7 @@ export function Dashboard({
 
   const ranked = useMemo(() => {
     if (!report) return [];
-    return [...report.offers].sort((a, b) => a.recurringYearCost - b.recurringYearCost);
+    return [...report.offers].sort((a, b) => a.firstYearCost - b.firstYearCost);
   }, [report]);
 
   const recommended = ranked.find((o) => o.id === report?.recommendation.offerId);
@@ -303,13 +303,18 @@ export function Dashboard({
                 <p className="text-sm text-muted-foreground">{report.recommendation.body}</p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Metric
-                    label="Folgekosten / Jahr"
+                    label="Nächstes Jahr inkl. Bonus"
                     value={
-                      recommended ? formatEur(recommended.recurringYearCost, 0) : "–"
+                      recommended ? formatEur(recommended.firstYearCost, 0) : "–"
+                    }
+                    hint={
+                      recommended
+                        ? `Folgejahr ${formatEur(recommended.recurringYearCost, 0)}`
+                        : undefined
                     }
                   />
                   <Metric
-                    label="vs. Grundversorgung"
+                    label="vs. Grundversorgung (Jahr 1)"
                     value={
                       report.recommendation.savingsVsGrundversorgung != null
                         ? formatEur(report.recommendation.savingsVsGrundversorgung, 0)
@@ -422,10 +427,13 @@ export function Dashboard({
         {tab === "tarife" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Gefundene und modellierte Tarife</CardTitle>
+              <CardTitle>Gefundene Tarife</CardTitle>
               <CardDescription>
-                Sortiert nach Folgekosten ohne Neukundenbonus. Jahr-1-Preise mit
-                Bonus stehen extra – bei 14.500 kWh zählen Boni kaum.
+                Sortiert nach Gesamtkosten im nächsten Jahr inklusive Bonus.
+                Verivox und Check24 zeigen oft 20–40 Treffer, lassen sich aber
+                nicht automatisch auslesen (Bot-Schutz). Hier stehen die öffentlich
+                auslesbaren StromAuskunft-Tarife mit Arbeits- und Grundpreis plus
+                Grundversorgung und NaheSTROM. Die volle Portal-Liste: Tab Quellen.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -438,7 +446,7 @@ export function Dashboard({
                       <TableHead>Anbieter</TableHead>
                       <TableHead>Art</TableHead>
                       <TableHead className="text-right">Arbeitspreis</TableHead>
-                      <TableHead className="text-right">Jahr 1</TableHead>
+                      <TableHead className="text-right">Jahr 1 inkl. Bonus</TableHead>
                       <TableHead className="text-right">Folgejahr</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
@@ -461,10 +469,10 @@ export function Dashboard({
                           <TableCell className="text-right">
                             {offer.workingPriceCt != null ? formatCt(offer.workingPriceCt) : "–"}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right font-medium">
                             {formatEur(offer.firstYearCost, 0)}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right text-muted-foreground">
                             {formatEur(offer.recurringYearCost, 0)}
                           </TableCell>
                           <TableCell className="text-right">
@@ -523,8 +531,9 @@ export function Dashboard({
               <CardHeader>
                 <CardTitle>Portale zum Gegenprüfen</CardTitle>
                 <CardDescription>
-                  Verivox und Check24 blocken automatisierte Abfragen. Hier die
-                  direkten Links mit eurer PLZ.
+                  Verivox und Check24 blocken automatisierte Abfragen, deshalb
+                  stehen hier nicht dieselben 20–40 Treffer wie im Browser. Die
+                  Links öffnen den Vergleich mit PLZ 55545 und 14.500 kWh.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">

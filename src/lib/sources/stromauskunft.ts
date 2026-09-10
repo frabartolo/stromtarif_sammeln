@@ -1,7 +1,6 @@
 import { fetchText, stripTags } from "@/lib/http";
 import { parseDeNumber } from "@/lib/money";
-import type { Household } from "@/lib/types";
-import type { SourceStatus, TariffOffer } from "@/lib/types";
+import type { Household, SourceStatus, TariffOffer } from "@/lib/types";
 
 const URL =
   "https://www.stromauskunft.de/de/stadt/stromanbieter-in-bad-kreuznach.html";
@@ -11,15 +10,146 @@ function match(text: string, re: RegExp): string | null {
   return m?.[1]?.trim() ?? null;
 }
 
-function firstEuro(text: string, re: RegExp): number | null {
-  const m = text.match(re);
-  if (!m?.[1]) return null;
-  const value = parseDeNumber(m[1]);
-  return Number.isFinite(value) ? value : null;
+function euro(text: string, re: RegExp): number | null {
+  const raw = match(text, re);
+  if (!raw) return null;
+  try {
+    const value = parseDeNumber(raw);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
-function isPlausibleYear1(cost: number): boolean {
-  return cost >= 700 && cost <= 2500;
+function slug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+}
+
+function inferProvider(name: string, chunk: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("eprimo")) return "eprimo";
+  if (/\be\.?\s*on\b/i.test(name)) return "E.ON";
+  if (/entega/i.test(name)) return "ENTEGA";
+  const brands = [
+    "LichtBlick",
+    "ENTEGA",
+    "eprimo",
+    "E.ON",
+    "NEW Energie",
+    "lekker",
+    "Vattenfall",
+    "EnBW",
+    "Naturstrom",
+    "Grünwelt",
+    "E WIE EINFACH",
+    "YWIE EINFACH",
+  ];
+  for (const brand of brands) {
+    if (new RegExp(brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(chunk)) {
+      return brand;
+    }
+  }
+  return name.replace(/\s+\d+$/, "").trim() || "Anbieter";
+}
+
+function offerFromPrices(opts: {
+  id: string;
+  provider: string;
+  name: string;
+  green: boolean;
+  kwh: number;
+  workingPriceCt: number;
+  monthlyFee: number;
+  bonusFixed: number;
+  bonusPercent: number | null;
+  guaranteeMonths: number | null;
+  contractMonths: number | null;
+  sourceNote: string;
+  estimated: boolean;
+}): TariffOffer {
+  const basePriceYear = opts.monthlyFee * 12;
+  const recurring = (opts.kwh * opts.workingPriceCt) / 100 + basePriceYear;
+  const percentBonus = opts.bonusPercent != null ? recurring * (opts.bonusPercent / 100) : 0;
+  const bonusYear1 = percentBonus + opts.bonusFixed;
+  const firstYear = Math.max(0, recurring - bonusYear1);
+  return {
+    id: opts.id,
+    provider: opts.provider,
+    name: opts.name,
+    kind: "fixed",
+    green: opts.green,
+    workingPriceCt: opts.workingPriceCt,
+    basePriceYear,
+    firstYearCost: firstYear,
+    recurringYearCost: recurring,
+    bonusYear1,
+    priceGuaranteeMonths: opts.guaranteeMonths,
+    contractMonths: opts.contractMonths,
+    monthlyFee: opts.monthlyFee,
+    source: "StromAuskunft Bad Kreuznach",
+    sourceUrl: URL,
+    estimated: opts.estimated,
+    notes: [
+      `Arbeitspreis ${opts.workingPriceCt.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ct/kWh, Grundpreis ${opts.monthlyFee.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €/Monat.`,
+      opts.bonusPercent != null
+        ? `Neukundenbonus ${opts.bonusPercent} % vom Jahresbetrag plus ${opts.bonusFixed.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} Sofortbonus – Deckel in den AGB prüfen, Portale rechnen oft bei 3.500 kWh.`
+        : `Bonus im Portal ${opts.bonusFixed.toLocaleString("de-DE", { style: "currency", currency: "EUR" })} (Neukunden + Sofort). Bei 14.500 kWh oft gedeckelt, nicht linear höher.`,
+      opts.sourceNote,
+    ],
+  };
+}
+
+function parseListedTariffs(html: string, kwh: number): TariffOffer[] {
+  const offers: TariffOffer[] = [];
+  const re = /Tarif:\s*([^<]{3,80})/gi;
+  let matchTariff: RegExpExecArray | null;
+  while ((matchTariff = re.exec(html))) {
+    const name = matchTariff[1].replace(/\s+/g, " ").trim();
+    const next = html.indexOf("Tarif:", matchTariff.index + 6);
+    const chunk = html.slice(matchTariff.index, next === -1 ? matchTariff.index + 12000 : next);
+    const text = stripTags(chunk);
+    const workingPriceCt = euro(text, /([\d,]+)\s*Ct\/kWh\s*Arbeitspreis/i);
+    const monthlyFee = euro(text, /([\d,]+)\s*€\/Monat\s*Grundpreis/i);
+    if (workingPriceCt == null || monthlyFee == null) continue;
+    if (workingPriceCt < 18 || workingPriceCt > 55) continue;
+
+    const bonusPercentRaw = match(text, /inkl\.\s*([\d,]+)\s*%\s*Neukundenbonus/i);
+    const bonusPercent = bonusPercentRaw ? parseDeNumber(bonusPercentRaw) : null;
+    const neukundenEuro = bonusPercent == null ? euro(text, /([\d.]+,\d{2})\s*€\s*Neukundenbonus/i) ?? 0 : 0;
+    const sofortEuro = euro(text, /([\d.]+,\d{2})\s*€\s*Sofortbonus/i) ?? 0;
+    const guaranteeMonths = euro(text, /Preisgarantie:\s*(\d+)\s*Monate/i);
+    const contractMonths = euro(text, /Erstlaufzeit:\s*(\d+)\s*Monate/i);
+    const green = /öko|klima|grün/i.test(name) || /Ökostrom|100%\s*Ökostrom/i.test(text);
+    const provider = inferProvider(name, chunk + " " + text);
+
+    offers.push(
+      offerFromPrices({
+        id: `sa-${slug(provider)}-${slug(name)}`,
+        provider,
+        name,
+        green,
+        kwh,
+        workingPriceCt,
+        monthlyFee,
+        bonusFixed: neukundenEuro + sofortEuro,
+        bonusPercent: bonusPercent != null && bonusPercent > 0 && bonusPercent <= 40 ? bonusPercent : null,
+        guaranteeMonths,
+        contractMonths,
+        sourceNote:
+          "Aus der StromAuskunft-Wechseltabelle (die drei günstigsten abschließbaren Tarife, oft 3.500-kWh-Darstellung). Arbeits- und Grundpreis gelten verbrauchsunabhängig; Bonus vor Abschluss mit 14.500 kWh gegenprüfen.",
+        estimated: bonusPercent != null,
+      }),
+    );
+  }
+  return offers;
 }
 
 function scaleFrom3500(opts: {
@@ -51,7 +181,7 @@ function scaleFrom3500(opts: {
     priceGuaranteeMonths: 12,
     contractMonths: 12,
     monthlyFee: null,
-    source: "StromAuskunft Bad Kreuznach",
+    source: "StromAuskunft Bad Kreuznach (Übersicht 3.500 kWh)",
     sourceUrl: URL,
     estimated: true,
     notes: [
@@ -59,10 +189,21 @@ function scaleFrom3500(opts: {
         style: "currency",
         currency: "EUR",
       })} inkl. Bonus.`,
-      `Hochrechnung auf ${opts.kwh.toLocaleString("de-DE")} kWh mit angenommenem Grundpreis ${opts.assumedGpYear.toLocaleString("de-DE")} €/a und Bonus ${opts.assumedBonus.toLocaleString("de-DE")} € (Boni skalieren nicht mit dem Verbrauch).`,
+      `Hochrechnung auf ${opts.kwh.toLocaleString("de-DE")} kWh. Boni skalieren nicht 1:1 mit dem Verbrauch.`,
       opts.sourceNote,
     ],
   };
+}
+
+function alreadyListed(offers: TariffOffer[], provider: string, name: string): boolean {
+  const p = provider.toLowerCase();
+  const n = name.toLowerCase();
+  return offers.some(
+    (o) =>
+      o.provider.toLowerCase().includes(p.slice(0, 8)) ||
+      n.includes(o.name.toLowerCase().slice(0, 10)) ||
+      o.name.toLowerCase().includes(n.slice(0, 10)),
+  );
 }
 
 export async function fetchStromauskunft(household: Household): Promise<{
@@ -87,81 +228,57 @@ export async function fetchStromauskunft(household: Household): Promise<{
     };
   }
 
+  const listed = parseListedTariffs(res.text, household.purchasedKwh);
   const text = stripTags(res.text);
-  let cheapestEffectiveCt: number | null = null;
   const cheapestCtRaw = match(
     text,
     /Günstigster Strompreis für Neukunden in Bad Kreuznach\s+([\d,]+)\s*Cent/i,
   );
+  let cheapestEffectiveCt: number | null = null;
   if (cheapestCtRaw) {
     const ct = parseDeNumber(cheapestCtRaw);
     if (ct >= 15 && ct <= 55) cheapestEffectiveCt = ct;
   }
 
-  const candidates = [
-    firstEuro(text, /([\d.]+,\d{2})\s*€\s*Günstigster Anbieter/i),
-    firstEuro(text, /NEWfair Strom[\s\S]{0,60}?((?:[1-2]\.\d{3}|\d{3,4}),\d{2})\s*€/i),
-    cheapestEffectiveCt != null ? (cheapestEffectiveCt * 3500) / 100 : null,
-  ].filter((n): n is number => n != null && isPlausibleYear1(n));
-
-  const greenCandidates = [
-    firstEuro(text, /ENTEGA Ökostrom[\s\S]{0,80}?((?:[1-2]\.\d{3}|\d{3,4}),\d{2})\s*€/i),
-    firstEuro(text, /günstigster Ökostromtarif[\s\S]{0,160}?((?:[1-2]\.\d{3}|\d{3,4}),\d{2})\s*€/i),
-  ].filter((n): n is number => n != null && isPlausibleYear1(n));
-
-  const provider =
+  const overviewCheapest = euro(text, /([\d.]+,\d{2})\s*€\s*Günstigster Anbieter/i);
+  const overviewProvider =
     match(text, /Günstigster Anbieter \(([^)]+)\)/i) ?? "NEW Energie & Wasser";
-  const cheapestName = match(text, /(NEWfair Strom(?:\s+\d+)?)/i) ?? "NEWfair Strom 12";
-  const greenName = match(text, /(ENTEGA Ökostrom[^\d]{0,24})/i) ?? "ENTEGA Ökostrom pur 12";
-
-  const offers: TariffOffer[] = [];
-  const year1 = candidates[0];
-  if (year1 != null) {
-    offers.push(
+  const overviewName = match(text, /(NEWfair Strom(?:\s+\d+)?)/i) ?? "NEWfair Strom 12";
+  if (
+    overviewCheapest != null &&
+    overviewCheapest >= 700 &&
+    overviewCheapest <= 2500 &&
+    !alreadyListed(listed, overviewProvider, overviewName)
+  ) {
+    listed.push(
       scaleFrom3500({
-        id: "sa-cheapest",
-        provider,
-        name: cheapestName,
-        year1At3500: year1,
+        id: "sa-overview-cheapest",
+        provider: overviewProvider,
+        name: overviewName,
+        year1At3500: overviewCheapest,
         green: false,
         kwh: household.purchasedKwh,
         assumedBonus: 220,
         assumedGpYear: 175,
-        sourceNote:
-          "StromAuskunft, Stand der Seite. Vor Abschluss Arbeitspreis, Grundpreis und Bonusdeckel im Rechner mit 14.500 kWh gegenprüfen.",
-      }),
-    );
-  }
-  if (greenCandidates[0] != null) {
-    offers.push(
-      scaleFrom3500({
-        id: "sa-green",
-        provider: "ENTEGA",
-        name: greenName.replace(/\s+/g, " ").trim(),
-        year1At3500: greenCandidates[0],
-        green: true,
-        kwh: household.purchasedKwh,
-        assumedBonus: 200,
-        assumedGpYear: 175,
-        sourceNote: "Günstigster Ökostrom laut StromAuskunft für Bad Kreuznach.",
+        sourceNote: "Nur in der 3.500-kWh-Übersicht, nicht in der Wechseltabelle. Stärker geschätzt.",
       }),
     );
   }
 
   return {
-    offers,
+    offers: listed,
     cheapestEffectiveCt,
     source: {
       id: "stromauskunft",
       label: "StromAuskunft Bad Kreuznach",
-      ok: offers.length > 0,
+      ok: listed.length > 0,
       fetchedAt: now,
       url: URL,
       note:
-        offers.length > 0
-          ? "Tagesaktuelle Portalpreise für 3.500 kWh, hochgerechnet auf euren Netzbezug. Jahreskosten unter 700 € bei 3.500 kWh werden als Parserfehler verworfen."
-          : "Seite geladen, aber keine plausiblen Jahreskosten erkannt.",
-      error: offers.length === 0 ? "Parser hat keine Tarifkosten gefunden." : undefined,
+        listed.length > 0
+          ? `${listed.length} Tarif(e) aus der öffentlichen Wechseltabelle bzw. Übersicht. Verivox/Check24 listen oft deutlich mehr, blocken aber Bots.`
+          : "Seite geladen, aber keine Tarifkarten mit Arbeits- und Grundpreis erkannt.",
+      error: listed.length === 0 ? "Parser hat keine Tarifkosten gefunden." : undefined,
     },
   };
 }

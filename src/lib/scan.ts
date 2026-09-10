@@ -41,8 +41,7 @@ function pickRecommendation(offers: TariffOffer[], household: Household): ScanRe
     .filter((offer) => isPlausibleOffer(offer, household.purchasedKwh))
     .sort((a, b) => {
       const score = (offer: TariffOffer) => {
-        let value = offer.recurringYearCost;
-        if (offer.bonusYear1 > offer.recurringYearCost * 0.12) value += 80;
+        let value = offer.firstYearCost;
         if (household.preferGreen && !offer.green) value += 40;
         return value;
       };
@@ -60,8 +59,8 @@ function pickRecommendation(offers: TariffOffer[], household: Household): ScanRe
     };
   }
 
-  const vsGv = gv.recurringYearCost - best.recurringYearCost;
-  const vsCurrent = current != null ? current - best.recurringYearCost : null;
+  const vsGv = gv.firstYearCost - best.firstYearCost;
+  const vsCurrent = current != null ? current - best.firstYearCost : null;
   const caveat = best.estimated
     ? " Die Zahl ist eine Modellrechnung – vor dem Wechsel Arbeitspreis, Grundpreis, Bonusdeckel und Preisgarantie im Portal mit 14.500 kWh gegenprüfen."
     : "";
@@ -89,9 +88,9 @@ function pickRecommendation(offers: TariffOffer[], household: Household): ScanRe
     offerId: best.id,
     headline:
       vsGv > 80
-        ? `${best.provider} liegt rund ${formatEur(vsGv, 0)} unter der Grundversorgung`
-        : `Günstigstes Modell: ${best.provider}`,
-    body: `${best.provider} · ${best.name} kommt auf etwa ${formatEur(best.recurringYearCost, 0)} Folgekosten pro Jahr bei ${household.purchasedKwh.toLocaleString("de-DE")} kWh Netzbezug (${loadHint}). Die Grundversorgung der Stadtwerke Bad Kreuznach liegt bei ${formatEur(gv.recurringYearCost, 0)}.${deadline}${caveat}${meterHint}`,
+        ? `${best.provider} liegt im nächsten Jahr rund ${formatEur(vsGv, 0)} unter der Grundversorgung`
+        : `Günstigstes Modell im nächsten Jahr: ${best.provider}`,
+    body: `${best.provider} · ${best.name}: ${formatEur(best.firstYearCost, 0)} im nächsten Jahr inkl. Bonus (${formatEur(best.recurringYearCost, 0)} Folgejahr) bei ${household.purchasedKwh.toLocaleString("de-DE")} kWh Netzbezug (${loadHint}). Die Grundversorgung der Stadtwerke Bad Kreuznach liegt bei ${formatEur(gv.firstYearCost, 0)}.${deadline}${caveat}${meterHint}`,
     savingsVsGrundversorgung: vsGv,
     savingsVsCurrent: vsCurrent,
   };
@@ -167,7 +166,7 @@ export function isImprovement(
   if (!nextBest) return false;
   if (!prevBest) return true;
   if (nextBest.provider !== prevBest.provider || nextBest.name !== prevBest.name) {
-    return nextBest.recurringYearCost + 10 < prevBest.recurringYearCost;
+    return nextBest.firstYearCost + 10 < prevBest.firstYearCost;
   }
-  return prevBest.recurringYearCost - nextBest.recurringYearCost >= threshold;
+  return prevBest.firstYearCost - nextBest.firstYearCost >= threshold;
 }

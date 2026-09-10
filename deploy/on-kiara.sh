@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Übernimmt DISCORD_WEBHOOK_URL so, wie der khanhiwara-Migrate-Dienst ihn nutzt
-# (migrate_service/lib/notify.sh, Environment DISCORD_WEBHOOK_URL).
+# Übernimmt Discord-Zugang von Hermes auf Kiara:
+#   /home/kiara/.hermes/.env  (DISCORD_BOT_TOKEN, DISCORD_ALLOWED_USERS,
+#   optional DISCORD_HOME_CHANNEL)
+# Webhook bleibt als Fallback (khanhiwara-migration).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,17 +19,48 @@ compose() {
   fi
 }
 
-found=""
+read_env_var() {
+  local file="$1" key="$2"
+  [[ -f "$file" ]] || return 0
+  local line value
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$file" | tail -n1 || true)"
+  [[ -n "$line" ]] || return 0
+  value="${line#*=}"
+  value="${value%$'\r'}"
+  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+    value="${value:1:${#value}-2}"
+  elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  printf '%s' "$value"
+}
 
-if [[ -n "${DISCORD_WEBHOOK_URL:-}" ]]; then
-  found="$DISCORD_WEBHOOK_URL"
+BOT_TOKEN="${DISCORD_BOT_TOKEN:-}"
+ALLOWED_USERS="${DISCORD_ALLOWED_USERS:-}"
+HOME_CHANNEL="${DISCORD_HOME_CHANNEL:-${DISCORD_CHANNEL_ID:-}}"
+WEBHOOK="${DISCORD_WEBHOOK_URL:-}"
+
+HERMES_FILES=(
+  /home/kiara/.hermes/.env
+  "${HOME}/.hermes/.env"
+  /home/stefan/.hermes/.env
+)
+
+for file in "${HERMES_FILES[@]}"; do
+  if [[ -f "$file" ]]; then
+    [[ -z "$BOT_TOKEN" ]] && BOT_TOKEN="$(read_env_var "$file" DISCORD_BOT_TOKEN)"
+    [[ -z "$ALLOWED_USERS" ]] && ALLOWED_USERS="$(read_env_var "$file" DISCORD_ALLOWED_USERS)"
+    [[ -z "$HOME_CHANNEL" ]] && HOME_CHANNEL="$(read_env_var "$file" DISCORD_HOME_CHANNEL)"
+    [[ -z "$HOME_CHANNEL" ]] && HOME_CHANNEL="$(read_env_var "$file" DISCORD_CHANNEL_ID)"
+    [[ -z "$WEBHOOK" ]] && WEBHOOK="$(read_env_var "$file" DISCORD_WEBHOOK_URL)"
+  fi
+done
+
+if [[ -z "$WEBHOOK" ]] && command -v systemctl >/dev/null 2>&1; then
+  WEBHOOK="$(systemctl show coldlairs-migrate.service -p Environment --no-pager 2>/dev/null | sed -n 's/.*DISCORD_WEBHOOK_URL=\([^ ]*\).*/\1/p' || true)"
 fi
 
-if [[ -z "$found" ]] && command -v systemctl >/dev/null 2>&1; then
-  found="$(systemctl show coldlairs-migrate.service -p Environment --no-pager 2>/dev/null | sed -n 's/.*DISCORD_WEBHOOK_URL=\([^ ]*\).*/\1/p' || true)"
-fi
-
-if [[ -z "$found" ]]; then
+if [[ -z "$WEBHOOK" ]]; then
   for candidate in \
     /etc/environment \
     /home/stefan/.env \
@@ -36,42 +69,58 @@ if [[ -z "$found" ]]; then
     "$ROOT/.env"
   do
     if [[ -f "$candidate" ]]; then
-      line="$(grep -E '^[[:space:]]*DISCORD_WEBHOOK_URL=' "$candidate" | tail -n1 || true)"
-      if [[ -n "$line" ]]; then
-        found="${line#DISCORD_WEBHOOK_URL=}"
-        found="${found%\"}"
-        found="${found#\"}"
+      value="$(read_env_var "$candidate" DISCORD_WEBHOOK_URL)"
+      if [[ -n "$value" ]]; then
+        WEBHOOK="$value"
         break
       fi
     fi
   done
 fi
 
-if [[ -z "$found" ]]; then
-  echo "Kein DISCORD_WEBHOOK_URL gefunden."
-  echo "Der Migrate-Dienst erwartet dieselbe Variable (siehe notify.sh)."
-  echo "Auf Kiara/khanhiwara z. B.:"
-  echo "  systemctl show coldlairs-migrate.service -p Environment"
-  echo "  grep DISCORD_WEBHOOK_URL /etc/environment ~/.env"
-  exit 1
+bot_ok=0
+if [[ -n "$BOT_TOKEN" && ( -n "$HOME_CHANNEL" || -n "$ALLOWED_USERS" ) ]]; then
+  bot_ok=1
 fi
 
-if [[ "$found" != https://discord.com/api/webhooks/* && "$found" != https://discordapp.com/api/webhooks/* ]]; then
-  echo "Gefundener Wert sieht nicht nach einem Discord-Webhook aus – Abbruch."
+webhook_ok=0
+if [[ "$WEBHOOK" == https://discord.com/api/webhooks/* || "$WEBHOOK" == https://discordapp.com/api/webhooks/* ]]; then
+  webhook_ok=1
+fi
+
+if [[ "$bot_ok" -eq 0 && "$webhook_ok" -eq 0 ]]; then
+  echo "Kein Discord-Ziel gefunden."
+  echo "Erwartet in /home/kiara/.hermes/.env:"
+  echo "  DISCORD_BOT_TOKEN=..."
+  echo "  DISCORD_ALLOWED_USERS=...   (oder DISCORD_HOME_CHANNEL=...)"
+  echo "Optional Fallback: DISCORD_WEBHOOK_URL"
   exit 1
 fi
 
 tmp="$(mktemp)"
 if [[ -f .env ]]; then
-  grep -v '^DISCORD_WEBHOOK_URL=' .env > "$tmp" || true
+  grep -Ev '^(DISCORD_BOT_TOKEN|DISCORD_ALLOWED_USERS|DISCORD_HOME_CHANNEL|DISCORD_WEBHOOK_URL|REPORT_CRON|TZ|PORT)=' .env > "$tmp" || true
 else
   : > "$tmp"
 fi
-printf 'DISCORD_WEBHOOK_URL=%s\n' "$found" >> "$tmp"
+
+if [[ "$bot_ok" -eq 1 ]]; then
+  printf 'DISCORD_BOT_TOKEN=%s\n' "$BOT_TOKEN" >> "$tmp"
+  [[ -n "$ALLOWED_USERS" ]] && printf 'DISCORD_ALLOWED_USERS=%s\n' "$ALLOWED_USERS" >> "$tmp"
+  [[ -n "$HOME_CHANNEL" ]] && printf 'DISCORD_HOME_CHANNEL=%s\n' "$HOME_CHANNEL" >> "$tmp"
+fi
+if [[ "$webhook_ok" -eq 1 ]]; then
+  printf 'DISCORD_WEBHOOK_URL=%s\n' "$WEBHOOK" >> "$tmp"
+fi
 printf 'REPORT_CRON=0 7 * * 1\nTZ=Europe/Berlin\nPORT=43145\n' >> "$tmp"
 mv "$tmp" .env
 chmod 600 .env
-echo "Webhook in .env übernommen (nicht ausgegeben)."
+
+if [[ "$bot_ok" -eq 1 ]]; then
+  echo "Hermes-Discord aus /home/kiara/.hermes/.env übernommen (Token nicht ausgegeben)."
+else
+  echo "Webhook in .env übernommen (nicht ausgegeben)."
+fi
 
 if command -v docker >/dev/null 2>&1; then
   compose up -d --build

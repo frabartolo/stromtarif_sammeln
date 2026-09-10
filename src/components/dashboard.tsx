@@ -45,6 +45,9 @@ type StatusResponse = {
     masked: string;
     weeklyCron: string;
     envLocked: boolean;
+    mode?: "bot" | "webhook" | "none";
+    target?: string;
+    allowedUserCount?: number;
   };
   cron: string;
   timezone: string;
@@ -544,20 +547,30 @@ export function Dashboard({
                 Discord-Berichte
               </CardTitle>
               <CardDescription>
-                Wöchentlich montags 07:00 Europe/Berlin. Dieselbe Variable wie der
-                khanhiwara-Migrate-Dienst: <code>DISCORD_WEBHOOK_URL</code> (
-                <code>migrate_service/lib/notify.sh</code>). Auf Kiara (192.168.5.43)
-                per <code>./deploy/on-kiara.sh</code> aus der systemd-Umgebung
-                übernehmen.
+                Wöchentlich montags 07:00 Europe/Berlin. Auf Kiara dieselben
+                Hermes-Variablen wie <code>/home/kiara/.hermes/.env</code>:{" "}
+                <code>DISCORD_BOT_TOKEN</code> und{" "}
+                <code>DISCORD_ALLOWED_USERS</code>. Ohne{" "}
+                <code>DISCORD_HOME_CHANNEL</code> geht der Bericht per DM an die
+                erlaubten Nutzer. Webhook bleibt optionaler Fallback.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Row
                 label="Status"
-                value={status?.discord.configured ? "Webhook hinterlegt" : "fehlt noch"}
+                value={
+                  status?.discord.configured
+                    ? status.discord.mode === "bot"
+                      ? "Hermes-Bot hinterlegt"
+                      : "Webhook hinterlegt"
+                    : "fehlt noch"
+                }
               />
               {status?.discord.configured ? (
                 <Row label="Ziel" value={status.discord.masked} />
+              ) : null}
+              {status?.discord.mode === "bot" && (status.discord.allowedUserCount ?? 0) > 0 ? (
+                <Row label="Erlaubte Nutzer" value={String(status.discord.allowedUserCount)} />
               ) : null}
               {report?.discord.posted ? (
                 <p className="text-sm text-muted-foreground">Letzter Scan wurde nach Discord gesendet.</p>
@@ -568,10 +581,17 @@ export function Dashboard({
                 <p className="text-sm text-destructive">{report.discord.error}</p>
               ) : null}
 
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={testDiscord} disabled={testingDiscord || !status?.discord.configured}>
+                  {testingDiscord ? <Loader2 className="animate-spin" /> : null}
+                  Test senden
+                </Button>
+              </div>
+
               {!status?.discord.envLocked ? (
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="webhook">
-                    Discord Incoming Webhook
+                    Discord Incoming Webhook (optional, ohne Hermes-Bot)
                   </label>
                   <Input
                     id="webhook"
@@ -581,21 +601,16 @@ export function Dashboard({
                     value={webhook}
                     onChange={(e) => setWebhook(e.target.value)}
                   />
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={saveWebhook} disabled={savingWebhook || !webhook.trim()}>
-                      {savingWebhook ? <Loader2 className="animate-spin" /> : null}
-                      Speichern
-                    </Button>
-                    <Button variant="outline" onClick={testDiscord} disabled={testingDiscord || !status?.discord.configured}>
-                      {testingDiscord ? <Loader2 className="animate-spin" /> : null}
-                      Test senden
-                    </Button>
-                  </div>
+                  <Button onClick={saveWebhook} disabled={savingWebhook || !webhook.trim()}>
+                    {savingWebhook ? <Loader2 className="animate-spin" /> : null}
+                    Speichern
+                  </Button>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Der Webhook kommt aus der Umgebungsvariable DISCORD_WEBHOOK_URL
-                  und ist in der Oberfläche gesperrt.
+                  Discord kommt aus der Umgebung (Hermes{" "}
+                  <code>DISCORD_BOT_TOKEN</code> / <code>DISCORD_ALLOWED_USERS</code>
+                  ) und ist in der Oberfläche gesperrt.
                 </p>
               )}
             </CardContent>

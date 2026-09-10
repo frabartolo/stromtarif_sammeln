@@ -8,7 +8,7 @@ Verbrauch: Haushalt + Wärmepumpe + Wallbox (2 E-Autos), PV ohne Speicher, noch 
 
 ## Auf Kiara deployen
 
-Das Dashboard und der Cron laufen in Docker auf Port **43145**. Discord nutzt dieselbe Variable wie `khanhiwara-migration` (`DISCORD_WEBHOOK_URL`).
+Das Dashboard und der Cron laufen in Docker auf Port **43145**. Discord nutzt denselben Hermes-Bot wie auf Kiara (`/home/kiara/.hermes/.env`: `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`). Ohne `DISCORD_HOME_CHANNEL` geht der Bericht per Direktnachricht an die erlaubten Nutzer.
 
 ```bash
 git clone https://github.com/frabartolo/stromtarif_sammeln.git ~/stromtarif_sammeln
@@ -23,7 +23,7 @@ Spätere Updates:
 cd ~/stromtarif_sammeln && ./deploy/install-on-kiara.sh
 ```
 
-Das Skript sucht den Webhook in systemd (`coldlairs-migrate.service`), `/etc/environment` und bekannten `.env`-Dateien, schreibt eine lokale `.env` (nicht im Git) und startet `docker compose`.
+Das Skript liest **nur** die Discord-Variablen aus `/home/kiara/.hermes/.env` (nicht die übrigen Hermes-Keys), schreibt sie in eine lokale `.env` (nicht im Git) und startet `docker compose`.
 
 Optional systemd (nach dem ersten Start):
 
@@ -33,15 +33,18 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now stromtarif-agent.service
 ```
 
-## Discord (wie khanhiwara-migration)
+## Discord (Hermes auf Kiara)
+
+In `/home/kiara/.hermes/.env` stehen:
 
 ```bash
-# migrate_service/lib/notify.sh
-WEBHOOK="${DISCORD_WEBHOOK_URL:-}"
-curl -H 'Content-Type: application/json' -d '{"content":"..."}' "$WEBHOOK"
+DISCORD_BOT_TOKEN=...
+DISCORD_ALLOWED_USERS=...   # Komma-getrennte Discord-User-IDs
+# optional:
+# DISCORD_HOME_CHANNEL=...  # sonst DM an ALLOWED_USERS
 ```
 
-Die URL steht nicht im Git. Von außerhalb des LANs ist Kiara (`192.168.5.43` / `kiara.fritz.box`) nicht erreichbar.
+`./deploy/on-kiara.sh` kopiert genau diese Werte in die Container-Umgebung. Die URL eines Incoming Webhooks (`DISCORD_WEBHOOK_URL`) bleibt ein Fallback, wird auf Kiara aber nicht mehr benötigt.
 
 ## Was der Agent tut
 

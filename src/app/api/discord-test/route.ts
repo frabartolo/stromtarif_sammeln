@@ -1,38 +1,38 @@
 import { NextResponse } from "next/server";
-import { buildDiscordPayload } from "@/lib/discord";
+import { buildDiscordPayload, discordConfigured, sendDiscordPayload } from "@/lib/discord";
 import { loadHousehold } from "@/lib/household";
-import { latestReport, loadSettings } from "@/lib/store";
+import { latestReport } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const settings = loadSettings();
-  const url = settings.discordWebhookUrl.trim();
-  if (!url) {
+  if (!discordConfigured()) {
     return NextResponse.json(
-      { ok: false, error: "Kein Discord-Webhook hinterlegt." },
+      {
+        ok: false,
+        error:
+          "Kein Discord-Ziel. Auf Kiara DISCORD_BOT_TOKEN und DISCORD_ALLOWED_USERS aus /home/kiara/.hermes/.env übernehmen.",
+      },
       { status: 400 },
     );
   }
 
+  const household = loadHousehold();
   const latest = latestReport();
   const payload = latest
     ? buildDiscordPayload(latest)
     : {
-        username: "Stromtarif-Agent",
-        content: `Testnachricht vom Stromtarif-Agenten für ${loadHousehold().street}, ${loadHousehold().zip} ${loadHousehold().city}. Noch kein Scan vorhanden.`,
+        content: `Testnachricht vom Stromtarif-Agenten für ${household.street}, ${household.zip} ${household.city}. Noch kein Scan vorhanden.`,
       };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const text = await res.text();
+  const result = await sendDiscordPayload(
+    payload,
+    latest?.recommendation.headline ?? payload.content,
+  );
+  if (!result.posted) {
     return NextResponse.json(
-      { ok: false, error: `Discord HTTP ${res.status}: ${text.slice(0, 200)}` },
+      { ok: false, error: result.error ?? result.skippedReason ?? "Discord-Test fehlgeschlagen." },
       { status: 502 },
     );
   }

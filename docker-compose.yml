@@ -10,7 +10,11 @@ services:
       HOSTNAME: "0.0.0.0"
       DATA_DIR: /app/data
       TZ: Europe/Berlin
-      # Dieselbe Variable wie khanhiwara-migration/migrate_service/lib/notify.sh
+      # Hermes auf Kiara: /home/kiara/.hermes/.env
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_ALLOWED_USERS: ${DISCORD_ALLOWED_USERS:-}
+      DISCORD_HOME_CHANNEL: ${DISCORD_HOME_CHANNEL:-}
+      # Optionaler Fallback (khanhiwara-migration)
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       REPORT_CRON: ${REPORT_CRON:-0 7 * * 1}
     volumes:

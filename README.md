@@ -23,7 +23,17 @@ Spätere Updates:
 cd ~/stromtarif_sammeln && ./deploy/install-on-kiara.sh
 ```
 
-Das Skript liest **nur** die Discord-Variablen aus `/home/kiara/.hermes/.env` (nicht die übrigen Hermes-Keys), schreibt sie in eine lokale `.env` (nicht im Git) und startet `docker compose`.
+Nach `./deploy/on-kiara.sh` ist das Dashboard im LAN erreichbar:
+
+- [http://kiara:43145](http://kiara:43145) – wenn der Hostname `kiara` im Fritz-DNS steht
+- sonst [http://kiara.fritz.box:43145](http://kiara.fritz.box:43145) oder [http://192.168.5.43:43145](http://192.168.5.43:43145)
+
+Die Seite zeigt immer den **letzten gespeicherten Scan**. Neu geholt wird:
+
+- **Montag 07:00** Europe/Berlin: Scan und Discord-Bericht
+- **Dienstag–Sonntag 07:15**: stiller Scan; Discord nur, wenn ein Festpreis mindestens 50 € günstiger ist
+
+Im Browser lädt sie nicht von allein neu – einmal öffnen oder aktualisieren genügt. Manuell geht „Jetzt prüfen“ auf der Seite.
 
 Optional systemd (nach dem ersten Start):
 
@@ -50,7 +60,7 @@ DISCORD_ALLOWED_USERS=...   # Komma-getrennte Discord-User-IDs
 
 - Liest die **Grundversorgung der Stadtwerke Bad Kreuznach** (Preisblatt ab 01.01.2026).
 - Holt Neukunden- und Ökostromtarife für Bad Kreuznach bei StromAuskunft und rechnet auf 14.500 kWh hoch.
-- Schätzt dynamische Tarife, stuft sie ohne Smart Meter aber nachrangig ein.
+- Lässt dynamische Börsentarife weg, solange kein intelligentes Messsystem (iMSys) da ist.
 - Erinnert an das Wechselfenster vor dem 31.12.2026 (Lieferbeginn 1.1.2027, Anstoß ca. Mitte November).
 - Schreibt montags 07:00 Europe/Berlin nach Discord; an anderen Tagen 07:15 nur bei spürbarer Verbesserung.
 
@@ -84,5 +94,5 @@ Das GitHub-Repo ist öffentlich und enthält die Wohnadresse. Wenn das nicht gew
 ## Hinweise
 
 - Vor dem Wechsel Arbeitspreis, Grundpreis, Bonusdeckel und Preisgarantie mit **14.500 kWh** in Verivox/Check24 gegenprüfen.
-- Dynamische Tarife ohne Smart Meter rechnen über ein Standardlastprofil – nicht über euer Nachtladen der zwei Autos.
+- Dynamische Tarife ohne Smart Meter rechnen über ein Standardlastprofil – nicht über euer Nachtladen der zwei Autos. Deshalb sind sie im Vergleich ausgeblendet, bis ein iMSys da ist.
 - Wärmepumpe und Wallbox sind steuerbare Verbraucher (§ 14a EnWG); ob das schon beim Netzbetreiber gemeldet ist, steht noch offen.

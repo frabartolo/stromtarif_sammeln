@@ -42,7 +42,6 @@ function pickRecommendation(offers: TariffOffer[], household: Household): ScanRe
     .sort((a, b) => {
       const score = (offer: TariffOffer) => {
         let value = offer.recurringYearCost;
-        if (!household.hasSmartMeter && offer.kind === "dynamic") value += 500;
         if (offer.bonusYear1 > offer.recurringYearCost * 0.12) value += 80;
         if (household.preferGreen && !offer.green) value += 40;
         return value;
@@ -84,7 +83,7 @@ function pickRecommendation(offers: TariffOffer[], household: Household): ScanRe
 
   const meterHint = household.hasSmartMeter
     ? ""
-    : " Ohne Smart Meter lohnt ein dynamischer Tarif kaum – die Abrechnung läuft über ein Standardlastprofil, nicht über euer echtes Nachtladen. Erst Festpreis für 2027, Smart Meter mit der Wärmepumpe nachziehen.";
+    : " Dynamische Börsentarife (Tibber, aWATTar, …) sind ausgeblendet – ohne intelligentes Messsystem läuft die Abrechnung über ein Standardlastprofil, nicht über euer Nachtladen.";
 
   return {
     offerId: best.id,
@@ -102,8 +101,20 @@ export async function runScan(opts?: { notify?: boolean; reason?: string }): Pro
   const household = loadHousehold();
   const notify = opts?.notify !== false;
 
+  const includeDynamic = Boolean(household.hasSmartMeter);
   const [spotRes, portalRes] = await Promise.all([
-    fetchSpotPrices(),
+    includeDynamic
+      ? fetchSpotPrices()
+      : Promise.resolve({
+          spot: null,
+          source: {
+            id: "dynamic-tariffs",
+            label: "Dynamische Tarife",
+            ok: true,
+            fetchedAt: new Date().toISOString(),
+            note: "Ausgeschlossen: kein intelligentes Messsystem (iMSys). Vergleich nur Festpreis und Grundversorgung.",
+          },
+        }),
     fetchStromauskunft(household),
   ]);
 
@@ -111,7 +122,7 @@ export async function runScan(opts?: { notify?: boolean; reason?: string }): Pro
     grundversorgungOffer(household),
     ...localStadtwerkeOffers(household),
     ...portalRes.offers,
-    ...dynamicOffers(household, spotRes.spot),
+    ...(includeDynamic ? dynamicOffers(household, spotRes.spot) : []),
   ].filter(
     (offer) =>
       offer.kind === "grundversorgung" ||

@@ -291,7 +291,8 @@ export function Dashboard({
             {!report ? (
               <p className="text-muted-foreground">
                 Noch keine Daten. Startet den ersten Scan, dann erscheinen hier
-                Grundversorgung, Portalangebote und dynamische Modellrechnungen.
+                Grundversorgung und Festpreisangebote. Dynamische Tarife bleiben
+                ohne iMSys ausgeblendet.
               </p>
             ) : (
               <>
@@ -315,15 +316,19 @@ export function Dashboard({
                     }
                     hint={grundversorgung ? formatEur(grundversorgung.recurringYearCost, 0) : undefined}
                   />
-                  <Metric
-                    label="Börse 90 Tage"
-                    value={
-                      report.spot?.days90AvgCt != null
-                        ? formatCt(report.spot.days90AvgCt)
-                        : "–"
-                    }
-                    hint="ohne Netzentgelte"
-                  />
+                  {report.spot?.days90AvgCt != null ? (
+                    <Metric
+                      label="Börse 90 Tage"
+                      value={formatCt(report.spot.days90AvgCt)}
+                      hint="ohne Netzentgelte"
+                    />
+                  ) : (
+                    <Metric
+                      label="Dynamische Tarife"
+                      value="ausgeblendet"
+                      hint="kein iMSys / Smart Meter"
+                    />
+                  )}
                 </div>
               </>
             )}

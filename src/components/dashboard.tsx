@@ -48,6 +48,7 @@ type StatusResponse = {
     mode?: "bot" | "webhook" | "none";
     target?: string;
     allowedUserCount?: number;
+    hasBotToken?: boolean;
   };
   cron: string;
   timezone: string;
@@ -573,7 +574,20 @@ export function Dashboard({
               />
               {status?.discord.configured ? (
                 <Row label="Ziel" value={status.discord.masked} />
-              ) : null}
+              ) : status?.discord.hasBotToken ? (
+                <p className="text-sm text-destructive">
+                  Token ist da, aber keine User-IDs. In{" "}
+                  <code>/home/kiara/.hermes/.env</code> muss{" "}
+                  <code>DISCORD_ALLOWED_USERS</code> die Discord-User-ID enthalten
+                  (Entwicklermodus → Rechtsklick auf den Namen → ID kopieren), oder{" "}
+                  <code>DISCORD_HOME_CHANNEL</code> setzen.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Discord-Variablen kommen im Container nicht an. Nach einem Update:{" "}
+                  <code>git pull && ./deploy/on-kiara.sh</code>
+                </p>
+              )}
               {status?.discord.mode === "bot" && (status.discord.allowedUserCount ?? 0) > 0 ? (
                 <Row label="Erlaubte Nutzer" value={String(status.discord.allowedUserCount)} />
               ) : null}

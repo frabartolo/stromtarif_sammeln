@@ -1,5 +1,6 @@
 import { daysUntilContractEnd, switchByHint } from "@/lib/contract";
 import { formatCt, formatEur, formatKwh } from "@/lib/money";
+import { runtimeEnv } from "@/lib/runtime-env";
 import { loadSettings, maskWebhook } from "@/lib/store";
 import type { ScanReport, TariffOffer } from "@/lib/types";
 
@@ -143,16 +144,19 @@ export type DiscordPayload = ReturnType<typeof buildDiscordPayload> | {
 
 export function parseIdList(value: string | undefined | null): string[] {
   if (!value) return [];
-  return [...new Set(value.split(/[,\s;]+/).map((part) => part.trim()).filter((part) => /^\d{5,}$/.test(part)))];
+  const cleaned = value.replace(/[[\]"'(){}]/g, " ");
+  const snowflakes = cleaned.match(/\d{15,20}/g) ?? [];
+  if (snowflakes.length) return [...new Set(snowflakes)];
+  return [...new Set(cleaned.split(/[,\s;]+/).map((part) => part.trim()).filter((part) => /^\d{10,}$/.test(part)))];
 }
 
 export function discordRuntime(): DiscordRuntime {
   const settings = loadSettings();
   return {
-    botToken: process.env.DISCORD_BOT_TOKEN?.trim() ?? "",
-    allowedUsers: parseIdList(process.env.DISCORD_ALLOWED_USERS),
-    homeChannel: (process.env.DISCORD_HOME_CHANNEL ?? process.env.DISCORD_CHANNEL_ID ?? "").trim(),
-    webhookUrl: (process.env.DISCORD_WEBHOOK_URL?.trim() || settings.discordWebhookUrl).trim(),
+    botToken: runtimeEnv("DISCORD_BOT_TOKEN"),
+    allowedUsers: parseIdList(runtimeEnv("DISCORD_ALLOWED_USERS")),
+    homeChannel: runtimeEnv("DISCORD_HOME_CHANNEL") || runtimeEnv("DISCORD_CHANNEL_ID"),
+    webhookUrl: runtimeEnv("DISCORD_WEBHOOK_URL") || settings.discordWebhookUrl.trim(),
   };
 }
 
@@ -276,11 +280,19 @@ export async function sendDiscordPayload(
 ): Promise<ScanReport["discord"]> {
   const rt = discordRuntime();
   if (!discordConfigured(rt)) {
+    let skippedReason =
+      "Kein Discord-Ziel. Auf Kiara DISCORD_BOT_TOKEN und DISCORD_ALLOWED_USERS aus /home/kiara/.hermes/.env, optional DISCORD_HOME_CHANNEL.";
+    if (rt.botToken && !rt.homeChannel && rt.allowedUsers.length === 0) {
+      skippedReason =
+        "Bot-Token ist gesetzt, aber DISCORD_ALLOWED_USERS enthält keine Discord-User-IDs (lange Zahlen) und DISCORD_HOME_CHANNEL fehlt.";
+    } else if (!rt.botToken && !rt.webhookUrl) {
+      skippedReason =
+        "Im Container kommt kein DISCORD_BOT_TOKEN an. Bitte git pull und ./deploy/on-kiara.sh erneut ausführen.";
+    }
     return {
       attempted: false,
       posted: false,
-      skippedReason:
-        "Kein Discord-Ziel. Auf Kiara DISCORD_BOT_TOKEN und DISCORD_ALLOWED_USERS aus /home/kiara/.hermes/.env, optional DISCORD_HOME_CHANNEL.",
+      skippedReason,
     };
   }
 
@@ -337,7 +349,8 @@ export function discordStatusPublic() {
     masked,
     target: masked,
     allowedUserCount: rt.allowedUsers.length,
+    hasBotToken: Boolean(rt.botToken),
     weeklyCron: settings.weeklyCron,
-    envLocked: Boolean(process.env.DISCORD_BOT_TOKEN?.trim() || process.env.DISCORD_WEBHOOK_URL?.trim()),
+    envLocked: Boolean(runtimeEnv("DISCORD_BOT_TOKEN") || runtimeEnv("DISCORD_WEBHOOK_URL")),
   };
 }

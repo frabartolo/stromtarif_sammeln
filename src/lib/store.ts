@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { dataFile } from "@/lib/paths";
+import { runtimeEnv } from "@/lib/runtime-env";
 import type { AppSettings, ScanReport } from "@/lib/types";
 
 const MAX_REPORTS = 60;
@@ -11,7 +12,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export function loadSettings(): AppSettings {
-  const envUrl = process.env.DISCORD_WEBHOOK_URL?.trim() ?? "";
+  const envUrl = runtimeEnv("DISCORD_WEBHOOK_URL");
   const file = dataFile("settings.json");
   let stored: Partial<AppSettings> = {};
   if (fs.existsSync(file)) {
@@ -21,7 +22,7 @@ export function loadSettings(): AppSettings {
     ...DEFAULT_SETTINGS,
     ...stored,
     discordWebhookUrl: envUrl || stored.discordWebhookUrl || "",
-    weeklyCron: process.env.REPORT_CRON?.trim() || stored.weeklyCron || DEFAULT_SETTINGS.weeklyCron,
+    weeklyCron: runtimeEnv("REPORT_CRON") || stored.weeklyCron || DEFAULT_SETTINGS.weeklyCron,
   };
 }
 
@@ -31,8 +32,8 @@ export function saveSettings(update: Partial<AppSettings>): AppSettings {
     ...current,
     ...update,
   };
-  if (process.env.DISCORD_WEBHOOK_URL?.trim()) {
-    next.discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL.trim();
+  if (runtimeEnv("DISCORD_WEBHOOK_URL")) {
+    next.discordWebhookUrl = runtimeEnv("DISCORD_WEBHOOK_URL");
   }
   fs.writeFileSync(dataFile("settings.json"), JSON.stringify(next, null, 2) + "\n");
   return next;

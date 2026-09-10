@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { discordStatusPublic } from "@/lib/discord";
+import { runtimeEnv } from "@/lib/runtime-env";
 import { saveSettings } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -11,7 +12,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const body = (await request.json()) as { discordWebhookUrl?: string; weeklyCron?: string };
-  if ((process.env.DISCORD_BOT_TOKEN?.trim() || process.env.DISCORD_WEBHOOK_URL?.trim()) && body.discordWebhookUrl) {
+  if ((runtimeEnv("DISCORD_BOT_TOKEN") || runtimeEnv("DISCORD_WEBHOOK_URL")) && body.discordWebhookUrl) {
     return NextResponse.json(
       { error: "Discord kommt aus der Umgebung (Hermes-Bot oder DISCORD_WEBHOOK_URL) und kann nicht aus der UI überschrieben werden." },
       { status: 409 },

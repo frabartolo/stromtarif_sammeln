@@ -5,17 +5,15 @@ services:
     restart: unless-stopped
     ports:
       - "43145:43145"
+    env_file:
+      - .env
     environment:
       PORT: "43145"
       HOSTNAME: "0.0.0.0"
       DATA_DIR: /app/data
       TZ: Europe/Berlin
-      # Hermes auf Kiara: /home/kiara/.hermes/.env
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-      DISCORD_ALLOWED_USERS: ${DISCORD_ALLOWED_USERS:-}
-      DISCORD_HOME_CHANNEL: ${DISCORD_HOME_CHANNEL:-}
-      # Optionaler Fallback (khanhiwara-migration)
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      # Discord kommt aus .env (env_file). Keine leeren ${VAR:-}-Defaults,
+      # die gesetzte Werte überschreiben würden.
       REPORT_CRON: ${REPORT_CRON:-0 7 * * 1}
     volumes:
       - stromtarif-data:/app/data
